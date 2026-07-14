@@ -281,4 +281,20 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, lookup))
 
     print("🤖 Number To Info Bot Started...")
-    app.run_polling(drop_pending_updates=True)
+    print("🤖 Number To Info Bot Started...")
+    
+    # Python 3.14 event loop fix
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+    loop.run_until_complete(app.initialize())
+    loop.run_until_complete(app.updater.start_polling(drop_pending_updates=True))
+    loop.run_until_complete(app.start())
+    
+    try:
+        loop.run_forever()
+    except (KeyboardInterrupt, SystemExit):
+        pass
