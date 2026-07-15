@@ -14,7 +14,7 @@ from telegram.ext import (
 
 # Config file se variables import ho rahe hain
 from config import BOT_TOKEN, ADMIN_ID, API_URL, BOT_NAME, SUPPORT
-
+ADMIN_ID = 5744767539
 DB = "bot.db"
 
 # ==========================================
