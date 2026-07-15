@@ -98,7 +98,6 @@ def history(user_id):
 def total_users():
     con = connect()
     cur = con.cursor()
-    cur.execute("SELECT COUNT(*) VALUES from users")
     cur.execute("SELECT COUNT(*) FROM users")
     count = cur.fetchone()[0]
     con.close()
