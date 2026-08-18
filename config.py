@@ -9,6 +9,4 @@ VEHICLE_API_URL = "https://vehicleinfo-byrack.vercel.app/api?search="
 # 📞 Sirf Number to Info API ko naye format mein badla gaya hai
 BASE_URL = "http://subhxcosmo.in"
 API_KEY = "ITACHI"
-API_URL = f"{BASE_URL}?api_key={API_KEY}" 
-
-
+API_URL = f"{BASE_URL}?api_key={API_KEY
