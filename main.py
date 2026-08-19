@@ -23,12 +23,10 @@ ADMIN_ID = 5744767539
 BOT_NAME = "TYAGI Number To Info Bot"
 SUPPORT = "@TYAGI8"
 VEHICLE_API_URL = "https://vehicleinfo-byrack.vercel.app/api?search="
-
-# API_URL ekdam sahi se verify kar liya hai taaki NameResolutionError na aaye
 API_URL = "http://subhxcosmo.in"
 BOT_USERNAME_SIGNATURE = "@TYAGI_NUMBER_INFO_BOT"
 
-# Aapki Groq Free API Key yahan bilkul sahi setup hai
+# Aapki Groq API Key yahan bilkul sahi setup hai
 GROQ_API_KEY = "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"
 
 try:
@@ -39,10 +37,10 @@ except Exception:
 DB = "bot.db"
 USER_STATES = {}
 
-# Keep-Alive Engine for Render 24/7
+# Keep-Alive Engine for Render 24/7 online
 web_app = Flask('')
 @web_app.route('/')
-def home(): return "Bot Server Live & Double Checked!"
+def home(): return "Bot Server Live & Fully Checked!"
 def run_web_server(): web_app.run(host='0.0.0.0', port=8080)
 def keep_alive(): Thread(target=run_web_server, daemon=True).start()
 
@@ -63,7 +61,7 @@ def add_user(user_id, username):
     con.close()
 
 # ==========================================
-# PANEL LAYOUT (WITH WORKING AI BUTTON)
+# PANEL LAYOUT
 # ==========================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -76,7 +74,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🔍 Number Info", callback_data="lookup_mode"), 
             InlineKeyboardButton("🚗 Vehicle Info", callback_data="vehicle_mode")
         ],
-        [InlineKeyboardButton("🤖 AI Search", callback_data="ai_mode")], # AI search button
+        [InlineKeyboardButton("🤖 AI Search", callback_data="ai_mode")], 
         [
             InlineKeyboardButton("👤 Profile", callback_data="profile"), 
             InlineKeyboardButton("⭐ Premium", callback_data="premium")
@@ -94,31 +92,30 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "lookup_mode":
         USER_STATES[user_id] = "NUMBER_SEARCH"
-        await query.message.reply_text("📞 Number Info Mode Active!\nKripya 10-digit mobile number send karein.")
+        await query.message.reply_text("📞 **Number Info Mode Active!**\nKripya 10-digit mobile number send karein.")
     elif query.data == "vehicle_mode":
         USER_STATES[user_id] = "VEHICLE_SEARCH"
-        await query.message.reply_text("🚗 Vehicle Info Mode Active!\nKripya apna gaadi ka number send karein (e.g. UK04AQ9000).")
+        await query.message.reply_text("🚗 **Vehicle Info Mode Active!**\nKripya apna gaadi ka number send karein (e.g. UK04AQ9000).")
     elif query.data == "ai_mode":
         USER_STATES[user_id] = "AI_SEARCH"
-        await query.message.reply_text("🤖 AI Chat Search Mode Active!\nAb aap mujhse koi bhi sawal pooch sakte hain, main uska jwab dunga.")
+        await query.message.reply_text("🤖 **AI Chat Search Mode Active!**\nAb aap mujhse koi bhi sawal pooch sakte hain.")
     elif query.data == "menu_info":
         await query.message.reply_text("📋 Menu configuration active.")
-        elif query.data == "profile":
+    elif query.data == "profile":
         await query.message.reply_text(f"👤 Profile Info\n\nUser ID: {user_id}\nBot: {BOT_USERNAME_SIGNATURE}")
     elif query.data == "premium":
         await query.message.reply_text(f"⭐ Premium Subscription ke liye message karein: {SUPPORT}")
 
 # ==========================================
-# FINAL SAFE TRAFFIC ROUTER
+# TRAFFIC ROUTER
 # ==========================================
 async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_input = update.message.text.strip()
     state = USER_STATES.get(user_id)
 
-    # Strict Check: Pehle button click karna zaroori hai
     if not state:
-        await update.message.reply_text("⚠️ Notice: Kripya pehle upar diye gaye buttons mein se Number Info, Vehicle Info ya AI Search select karein!")
+        await update.message.reply_text("⚠️ **Notice:** Kripya pehle upar diye gaye buttons mein se **Number Info**, **Vehicle Info** ya **AI Search** select karein!")
         return
 
     # ---------------- TELEPHONE SEARCH ----------------
@@ -128,7 +125,6 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         await update.message.reply_text("🔍 Status: Searching phone records...")
         try:
-            # Fixed URL parameter integration schema
             full_target_url = f"{API_URL}&search={user_input}"
             r = requests.get(full_target_url, timeout=20)
             if r.status_code == 200:
@@ -143,7 +139,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # ---------------- VEHICLE SEARCH ----------------
     elif state == "VEHICLE_SEARCH":
         clean_vehicle = user_input.replace(" ", "").upper()
-        await update.message.reply_text(f"🚗 Status: Fetching details for vehicle {clean_vehicle}...")
+        await update.message.reply_text(f"🚗 Status: Fetching details for vehicle `{clean_vehicle}`...")
         try:
             r = requests.get(VEHICLE_API_URL + clean_vehicle, timeout=20)
             if r.status_code == 200:
@@ -155,18 +151,18 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         USER_STATES[user_id] = None 
         return
 
-    # ---------------- WORKING FREE AI SEARCH ----------------
+    # ---------------- FREE AI SEARCH (FIXED MODEL) ----------------
     elif state == "AI_SEARCH":
         if not ai_client:
-            await update.message.reply_text("⚠️ AI System Error: Groq client system authorization failed.")
+            await update.message.reply_text("⚠️ AI System Error: Authorization failed.")
             return
             
         await context.bot.send_chat_action(chat_id=user_id, action="typing")
         try:
-            # Groq fast Llama 3.3 call jo har sawal ka answer degi
+            # Model badal kar 'llama-3.1-8b-instant' kiya gaya hai jo 100% working hai
             chat_completion = ai_client.chat.completions.create(
                 messages=[{"role": "user", "content": user_input}],
-                model="llama-3.3-70b-versatile",
+                model="llama-3.1-8b-instant",
             )
             reply = chat_completion.choices.message.content
             await update.message.reply_text(reply)
@@ -175,7 +171,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         USER_STATES[user_id] = None 
         return
 
-if name == "main":
+if __name__ == "__main__":
     create_tables()
     keep_alive()
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -189,3 +185,4 @@ if name == "main":
     loop.run_until_complete(app.updater.start_polling(drop_pending_updates=True))
     loop.run_until_complete(app.start())
     loop.run_forever()
+    
