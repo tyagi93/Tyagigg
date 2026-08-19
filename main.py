@@ -31,7 +31,8 @@ GROQ_API_KEY = "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"
 
 try:
     ai_client = Groq(api_key=GROQ_API_KEY)
-    AI_MODEL = "llama3-70b-8192" 
+    # Bilkul naya working active model ID set kiya hai jo decommissioned nahi hai
+    AI_MODEL = "openai/gpt-oss-20b" 
 except Exception:
     ai_client = None
     AI_MODEL = None
@@ -87,13 +88,13 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     if query.data == "lookup_mode":
         USER_STATES[user_id] = "NUMBER_SEARCH"
-        await query.message.reply_text("📞 **Number Info Mode Active!**\nSend 10-digit number.")
+        await query.message.reply_text("📞 Number Info Mode Active!\nSend 10-digit number.")
     elif query.data == "vehicle_mode":
         USER_STATES[user_id] = "VEHICLE_SEARCH"
-        await query.message.reply_text("🚗 **Vehicle Info Mode Active!**\nKripya apna gaadi ka number send karein (e.g. UK04AQ9000).")
+        await query.message.reply_text("🚗 Vehicle Info Mode Active!\nKripya apna gaadi ka number send karein (e.g. UK04AQ9000).")
     elif query.data == "ai_mode":
         USER_STATES[user_id] = "AI_SEARCH"
-        await query.message.reply_text("🤖 **AI Chat Search Mode Active!**\nAb aap mujhse koi bhi sawal pooch sakte hain.")
+        await query.message.reply_text("🤖 AI Chat Search Mode Active!\nAb aap mujhse koi bhi sawal pooch sakte hain.")
     elif query.data == "menu_info":
         await query.message.reply_text("📋 Menu active.")
     elif query.data == "profile":
@@ -107,7 +108,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     state = USER_STATES.get(user_id)
 
     if not state:
-        await update.message.reply_text("⚠️ **Notice:** Kripya pehle upar diye gaye buttons mein se select karein!")
+        await update.message.reply_text("⚠️ Notice: Kripya pehle upar diye gaye buttons mein se select karein!")
         return
 
     # 1. NUMBER SEARCH
@@ -131,7 +132,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 2. VEHICLE SEARCH
     elif state == "VEHICLE_SEARCH":
         clean_vehicle = user_input.replace(" ", "").upper()
-        await update.message.reply_text(f"🚗 Status: Fetching details for vehicle `{clean_vehicle}`...")
+        await update.message.reply_text(f"🚗 Status: Fetching details for vehicle {clean_vehicle}...")
         try:
             target_url = f"{VEHICLE_API_URL}{clean_vehicle}"
             r = requests.get(target_url, timeout=20)
@@ -147,67 +148,63 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             f"📋 Vehicle Information Report\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"👤 Owner: {response_obj.get('owner', 'N/A')}\n"
+                            f"👨‍👦 Father Name: {response_obj.get('ownerFatherName', 'N/A')}\n"
                             f"🔢 Reg No: {raw_data.get('regNo', clean_vehicle)}\n"
                             f"📅 Reg Date: {response_obj.get('regDate', 'N/A')}\n"
                             f"🚘 Class: {response_obj.get('vehicleClass', 'N/A')}\n"
+                            f"⚙️ Vehicle Type: {response_obj.get('vehicleType', 'N/A')}\n"
                             f"🏭 Manufacturer: {response_obj.get('manufacturer') or 'N/A'}\n"
+                            f"📅 Mfg Month/Year: {response_obj.get('manufacturerMonthYear', 'N/A')}\n"
                             f"⛽ Fuel Type: {response_obj.get('fuelType') or 'N/A'}\n"
-                            f"⚙️ Engine No: {response_obj.get('engine', 'N/A')}\n"
-                            f"🛠️ Chassis No: {response_obj.get('chassis', 'N/A')}\n"
+                            f"🎛️ Cubic Capacity: {response_obj.get('cubicCapacity', '0')} CC\n"
+                            f"💺 Seat Capacity: {response_obj.get('seatCapacity', '0')}\n"
+                            f"🛠️ Engine No: {response_obj.get('engine', 'N/A')}\n"
+                            f"⛓️ Chassis No: {response_obj.get('chassis', 'N/A')}\n"
                             f"🏢 Authority: {response_obj.get('regAuthority', 'N/A')}\n"
-                            f"📍 RTO: {rto_data.get('rtoName', 'N/A')} ({rto_data.get('statename', 'N/A')})\n"
-                            f"🛡️ Insurance: {response_obj.get('insuranceCompanyName', 'N/A')}\n"
+                            f"📍 RTO: {rto_data.get('rtoName', 'N/A')} [{rto_data.get('rtoCode', 'N/A')}]\n"
+                            f"🗺️ State: {rto_data.get('statename', 'N/A')}\n"
+                            f"📮 Pincode: {raw_data.get('pincode', 'N/A')}\n"
+                            f"🏡 Permanent Address: {response_obj.get('permAddress', 'N/A')}\n"
+                            f"💰 Financer: {response_obj.get('financerName', 'N/A')}\n"
+                            f"💼 Commercial: {'Yes' if response_obj.get('isCommercial') else 'No'}\n"
+                            f"🛡️ Insurance Company: {response_obj.get('insuranceCompanyName', 'N/A')}\n"
+                            f"🧾 Insurance Policy: {response_obj.get('insurancePolicyNumber') or 'N/A'}\n"
                             f"📆 Insurance Upto: {response_obj.get('insuranceUpto', 'N/A')}\n"
+                            f"⚠️ Insurance Expired: {'Yes' if response_obj.get('insuranceExpired') else 'No'}\n"
+                            f"💚 PUCC Valid Upto: {response_obj.get('puccValidUpto', 'N/A')}\n"
+                            f"🆔 API Database ID: {response_obj.get('id', 'N/A')}\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
                             f"👑 Admin: {SUPPORT}\n"
-                            f"🤖  Bot: {BOT_USERNAME_SIGNATURE}"
+                            f"🤖 Bot: {BOT_USERNAME_SIGNATURE}"
                         )
                         await update.message.reply_text(report)
                     else:
-                        clean_fb = r.text.replace("@YeuIin", SUPPORT).replace("@kihoerack", BOT_USERNAME_SIGNATURE)
+                        clean_fb = r.text.replace("@YeuIin", SUPPORT).replace("@kihoerack", BOT_USERNAME_SIGNATURE).replace("*", "")
                         await update.message.reply_text(f"📊 Vehicle Result:\n\n{clean_fb[:1500]}")
                 except Exception:
-                    clean_fb = r.text.replace("@YeuIin", SUPPORT).replace("@kihoerack", BOT_USERNAME_SIGNATURE)
+                    clean_fb = r.text.replace("@YeuIin", SUPPORT).replace("@kihoerack", BOT_USERNAME_SIGNATURE).replace("*", "")
                     await update.message.reply_text(f"📊 Vehicle Result:\n\n{clean_fb[:1500]}")
             else:
                 await update.message.reply_text(f"⚠️ API Error ({r.status_code})")
         except Exception as e:
             await update.message.reply_text(f"⚠️ Error: {e}")
+        
         USER_STATES[user_id] = None 
         return
 
-    # 3. AI SEARCH 
+    # 3. AI SEARCH
     elif state == "AI_SEARCH":
         if not ai_client:
             await update.message.reply_text("⚠️ AI Client Configuration Error!")
+            USER_STATES[user_id] = None
             return
-        await update.message.reply_text("🤖 Typing...")
+            
+        typing_msg = await update.message.reply_text("🤖 Typing...")
         try:
-            chat_completion = ai_client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant. Keep responses sweet, clean, and useful."},
-                    {"role": "user", "content": user_input}
-                ],
-                model=AI_MODEL,
-                timeout=25
-            )
-            ai_response = chat_completion.choices.message.content
-            await update.message.reply_text(ai_response)
-        except Exception as e:
-            await update.message.reply_text(f"⚠️ AI Server Error: {e}")
-        USER_STATES[user_id] = None 
-        return
-
-if __name__ == "__main__":
-    create_tables()
-    keep_alive()
+            loop = asyncio.get_event_loop()
+            chat_completion = await loop.run_in_executor(
+                None,
+                lambda: ai_client.chat.completions.create(
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant. Keep responses sweet, clean, and useful."},
     
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(buttons))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
-    
-    print("Bot is up and running successfully!")
-    app.run_polling()
-
