@@ -1,4 +1,3 @@
-python-telegram-bot
-requests
-flask
-groq
+python-telegram-bot==20.8
+yt-dlp
+Flask
