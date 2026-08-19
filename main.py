@@ -1,7 +1,7 @@
-# -*- coding: utf-8 -*-
 import asyncio
 import sqlite3
 import requests
+import emoji  # Safe emoji rendering module
 from datetime import datetime, timedelta
 from flask import Flask
 from threading import Thread
@@ -21,7 +21,7 @@ try:
 except ImportError:
     BOT_TOKEN = "8996186987:AAFeF_T7tdfcHXRN-_0OwlDBmxCuKsqgpiM"
     API_URL = "http://subhxcosmo.in"
-    VEHICLE_API_URL = "https://vehicleinfo-byrack.vercel.app/api?search="
+    VEHICLE_API_URL = "https://vercel.app"
     BOT_NAME = "TYAGI Number To Info Bot "
     ADMIN_ID = 5744767539
     SUPPORT = "@TYAGI8"
@@ -33,7 +33,7 @@ DB = "bot.db"
 USER_STATES = {}
 
 # ==========================================
-# 🚀 KEEP-ALIVE SERVER (Render Keep-Alive Setup)
+# 🚀 KEEP-ALIVE SERVER
 # ==========================================
 web_app = Flask('')
 
@@ -161,36 +161,34 @@ def activate_premium(user_id, days):
     con.close()
 
 # ==========================================
-# BUTTON HANDLERS (ORIGINAL ASLI EMOJIS ADDED)
+# BUTTON HANDLERS (DYNAMIC EMOJI PARSING FIXED)
 # ==========================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     add_user(user.id, user.username, user.first_name)
 
     keyboard = [
-        [InlineKeyboardButton("📋 Menu", callback_data="menu_info")],
+        [InlineKeyboardButton(emoji.emojize(":clipboard: Menu"), callback_data="menu_info")],
         [
-            InlineKeyboardButton("🔍 Number Info", callback_data="lookup_mode"),
-            InlineKeyboardButton("🚗 Vehicle Info", callback_data="vehicle_mode")
+            InlineKeyboardButton(emoji.emojize(":magnifying_glass_tilted_left: Number Info"), callback_data="lookup_mode"),
+            InlineKeyboardButton(emoji.emojize(":automobile: Vehicle Info"), callback_data="vehicle_mode")
         ],
         [
-            InlineKeyboardButton("👤 Profile", callback_data="profile"),
-            InlineKeyboardButton("⭐ Premium", callback_data="premium")
+            InlineKeyboardButton(emoji.emojize(":bust_in_silhouette: Profile"), callback_data="profile"),
+            InlineKeyboardButton(emoji.emojize(":star: Premium"), callback_data="premium")
         ],
         [
-            InlineKeyboardButton("📜 History", callback_data="history"),
-            InlineKeyboardButton("❓ Help", callback_data="help")
+            InlineKeyboardButton(emoji.emojize(":scroll: History"), callback_data="history"),
+            InlineKeyboardButton(emoji.emojize(":question_mark: Help"), callback_data="help")
         ],
         [
-            InlineKeyboardButton("ℹ️ About", callback_data="about"),
-            InlineKeyboardButton("📞 Contact", callback_data="contact")
+            InlineKeyboardButton(emoji.emojize(":information: About"), callback_data="about"),
+            InlineKeyboardButton(emoji.emojize(":telephone_receiver: Contact"), callback_data="contact")
         ]
     ]
 
-    await update.message.reply_text(
-        f"👋 Welcome to {BOT_USERNAME_SIGNATURE}\n\nChoose an option below to continue.",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    welcome_msg = emoji.emojize(f":waving_hand: Welcome to {BOT_USERNAME_SIGNATURE}\n\nChoose an option below to continue.")
+    await update.message.reply_text(welcome_msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -198,29 +196,33 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "menu_info":
-        await query.message.reply_text("📋 Welcome to Menu! Aap niche diye gaye options ka use karke navigation kar sakte hain.")
+        await query.message.reply_text(emoji.emojize(":clipboard: Welcome to Menu! Aap niche diye gaye options ka use karke navigation kar sakte hain."))
 
     elif query.data == "lookup_mode":
         USER_STATES[user_id] = "NUMBER_SEARCH"
-        await query.message.reply_text("📞 **Number Info Mode Active!**\nKripya 10-digit ka mobile number send karein.")
+        await query.message.reply_text(emoji.emojize(":telephone_receiver: **Number Info Mode Active!**\nKripya 10-digit ka mobile number send karein."))
 
     elif query.data == "vehicle_mode":
         USER_STATES[user_id] = "VEHICLE_SEARCH"
-        await query.message.reply_text("🚗 **Vehicle Info Mode Active!**\nKripya apna gaadi ka number send karein (e.g. UK04AQ9000).")
+        await query.message.reply_text(emoji.emojize(":automobile: **Vehicle Info Mode Active!**\nKripya apna gaadi ka number send karein (e.g. UK04AQ9000)."))
 
     elif query.data == "help":
-        await query.message.reply_text(
-            f"❓ Help & Guidelines\n\n"
-            f"🔍 Search Kaise Karein: Pehle 'Number Info' ya 'Vehicle Info' button dabayein, phir details send karein.\n"
-            f"⭐ Free Limit: Har standard account ko default search limit milti hai.\n\n"
+        help_text = emoji.emojize(
+            f":question_mark: Help & Guidelines\n\n"
+            f":magnifying_glass_tilted_left: Search Kaise Karein: Pehle 'Number Info' ya 'Vehicle Info' button dabayein, phir details send karein.\n"
+            f":star: Free Limit: Har standard account ko default search limit milti hai.\n\n"
             f"Premium subscription active karne ya kisi madad ke liye support par sampark karein: {SUPPORT}"
         )
+        await query.message.reply_text(help_text)
+        
     elif query.data == "contact":
-        await query.message.reply_text(
-            f"📞 Contact Support\n\n"
+        contact_text = emoji.emojize(
+            f":telephone_receiver: Contact Support\n\n"
             f"Technical help ya premium activation ke liye yahan message karein:\n"
-            f"📣 Support Desk: {SUPPORT}"
+            f":loudspeaker: Support Desk: {SUPPORT}"
         )
+        await query.message.reply_text(contact_text)
+        
     elif query.data == "profile":
         u = get_user(user_id)
         premium_active = is_premium(user_id)
@@ -228,60 +230,43 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         days_left_text = ""
         
         if premium_active:
-            premium_status = "PREMIUM 💎"
-            expiry_str = u[5]
+            premium_status = emoji.emojize("PREMIUM :gem_stone:")
+            expiry_str = u
             if expiry_str == "Lifetime":
-                days_left_text = "\n⏳ Validity : Lifetime"
+                days_left_text = emoji.emojize("\n:hourglass_not_done: Validity : Lifetime")
             elif expiry_str:
                 try:
                     expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").date()
                     current_date = datetime.now().date()
                     remaining_days = (expiry_date - current_date).days
                     if remaining_days >= 0:
-                        days_left_text = f"\n⏳ Days Left : {remaining_days} Days"
+                        days_left_text = emoji.emojize(f"\n:hourglass_not_done: Days Left : {remaining_days} Days")
                     else:
                         premium_status = "FREE"
                 except Exception:
                     pass
 
-        await query.message.reply_text(
-            f"👑 Admin: {SUPPORT}\n\n"
-            f"🆔 User ID :  {u[0]}\n"
-            f"👤 Name : {u[2]}\n"
-            f"⭐ Plan : {premium_status}{days_left_text}\n"
-            f"🔍 Searches : {u[3] if u[3] >= 0 else 0} Left\n"
-            f"📅 Joined : {u[6] if u[6] else 'First Join'}\n"
+        profile_text = emoji.emojize(
+            f":crown: Admin: {SUPPORT}\n\n"
+            f":id: User ID :  {u}\n"
+            f":bust_in_silhouette: Name : {u}\n"
+            f":star: Plan : {premium_status}{days_left_text}\n"
+            f":magnifying_glass_tilted_left: Searches : {u if u >= 0 else 0} Left\n"
+            f":calendar: Joined : {u if u else 'First Join'}\n"
             f"_________________________\n\n"
-            f"🤖 Bot : {BOT_USERNAME_SIGNATURE}"
+            f":robot: Bot : {BOT_USERNAME_SIGNATURE}"
         )
+        await query.message.reply_text(profile_text)
+        
     elif query.data == "history":
         rows = history(user_id)
         if not rows:
-            await query.message.reply_text("📜 Notice: Aapka koi purana search record nahi mila.")
+            await query.message.reply_text(emoji.emojize(":scroll: Notice: Aapka koi purana search record nahi mila."))
             return
-        text = "📜 Your Search History:\n\n" + "\n".join([f"🔍 {n} — Date: {d}" for n, d in rows])
+        text = emoji.emojize(":scroll: Your Search History:\n\n") + "\n".join([emoji.emojize(f":magnifying_glass_tilted_left: {n} — Date: {d}") for n, d in rows])
         await query.message.reply_text(text)
         
     elif query.data == "about":
-        await query.message.reply_text(f"ℹ️ About Bot\n\n{BOT_USERNAME_SIGNATURE} ek high-speed live info retrieval portal system hai.\n👑 Admin: {SUPPORT}")
+        await query.message.reply_text(emoji.emojize(f":information: About Bot\n\n{BOT_USERNAME_SIGNATURE} ek high-speed live info retrieval portal system hai.\n:crown: Admin: {SUPPORT}"))
 
     elif query.data == "premium":
-        keyboard = [[InlineKeyboardButton("💳 Pay Now (QR Code)", callback_data="pay_now")]]
-        await query.message.reply_text(
-            "⭐ Premium Subscription Plans\n\n"
-            f"◽️ 1 Day Pack ➡️ ₹20\n"
-            f"◽️ 15 Days Access ➡️ ₹100\n"
-            f"◽️ 30 Days Access ➡️ ₹150\n"
-            f"◽️ Lifetime Access ➡️ ₹500\n\n"
-            "Niche diye gaye button par click karke payment QR code dekhein.",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    elif query.data == "pay_now":
-        QR_CODE_URL = "https://ibb.co" 
-        caption_text = (
-            f"💳 Payment Gateway\n\n"
-            f"◽️ 1 Day Pack ➡️ ₹20\n"
-            f"◽️ 15 Days Access ➡️ ₹100\n"
-            f"◽️ 30 Days Access ➡️ ₹150\n"
-            f"◽️ Lifetime Access ➡️ ₹500\n\n"
-            f"✔️ Instructions: Upar diye gaye QR Code ko scan karke payment karein.\n\n"
