@@ -144,23 +144,23 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         rto_data = response_obj.get("rtoData", {})
                         
                         report = (
-                            f"📋 **Vehicle Information Report**\n"
+                            f"📋 Vehicle Information Report\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
-                            f"👤 **Owner**: {response_obj.get('owner', 'N/A')}\n"
-                            f"🔢 **Reg No**: {raw_data.get('regNo', clean_vehicle)}\n"
-                            f"📅 **Reg Date**: {response_obj.get('regDate', 'N/A')}\n"
-                            f"🚘 **Class**: {response_obj.get('vehicleClass', 'N/A')}\n"
-                            f"🏭 **Manufacturer**: {response_obj.get('manufacturer') or 'N/A'}\n"
-                            f"⛽ **Fuel Type**: {response_obj.get('fuelType') or 'N/A'}\n"
-                            f"⚙️ **Engine No**: {response_obj.get('engine', 'N/A')}\n"
-                            f"🛠️ **Chassis No**: {response_obj.get('chassis', 'N/A')}\n"
-                            f"🏢 **Authority**: {response_obj.get('regAuthority', 'N/A')}\n"
-                            f"📍 **RTO**: {rto_data.get('rtoName', 'N/A')} ({rto_data.get('statename', 'N/A')})\n"
-                            f"🛡️ **Insurance**: {response_obj.get('insuranceCompanyName', 'N/A')}\n"
-                            f"📆 **Insurance Upto**: {response_obj.get('insuranceUpto', 'N/A')}\n"
+                            f"👤 Owner: {response_obj.get('owner', 'N/A')}\n"
+                            f"🔢 Reg No: {raw_data.get('regNo', clean_vehicle)}\n"
+                            f"📅 Reg Date: {response_obj.get('regDate', 'N/A')}\n"
+                            f"🚘 Class: {response_obj.get('vehicleClass', 'N/A')}\n"
+                            f"🏭 Manufacturer: {response_obj.get('manufacturer') or 'N/A'}\n"
+                            f"⛽ Fuel Type: {response_obj.get('fuelType') or 'N/A'}\n"
+                            f"⚙️ Engine No: {response_obj.get('engine', 'N/A')}\n"
+                            f"🛠️ Chassis No: {response_obj.get('chassis', 'N/A')}\n"
+                            f"🏢 Authority: {response_obj.get('regAuthority', 'N/A')}\n"
+                            f"📍 RTO: {rto_data.get('rtoName', 'N/A')} ({rto_data.get('statename', 'N/A')})\n"
+                            f"🛡️ Insurance: {response_obj.get('insuranceCompanyName', 'N/A')}\n"
+                            f"📆 Insurance Upto: {response_obj.get('insuranceUpto', 'N/A')}\n"
                             f"━━━━━━━━━━━━━━━━━━━\n"
-                            f"👑 **Admin**: {SUPPORT}\n"
-                            f"🤖 **Owner / Bot**: {BOT_USERNAME_SIGNATURE}"
+                            f"👑 Admin: {SUPPORT}\n"
+                            f"🤖  Bot: {BOT_USERNAME_SIGNATURE}"
                         )
                         await update.message.reply_text(report)
                     else:
