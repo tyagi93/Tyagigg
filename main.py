@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import asyncio
 import sqlite3
 import requests
@@ -14,7 +15,7 @@ from telegram.ext import (
     ContextTypes
 )
 
-# 📦 Yahan aapki config.py se settings load ho rahi hain
+# 📦 Configuration Settings
 try:
     from config import BOT_TOKEN, API_URL, VEHICLE_API_URL, BOT_NAME, ADMIN_ID, SUPPORT
 except ImportError:
@@ -32,7 +33,7 @@ DB = "bot.db"
 USER_STATES = {}
 
 # ==========================================
-# 🚀 KEEP-ALIVE SERVER
+# 🚀 KEEP-ALIVE SERVER (Render Keep-Alive Setup)
 # ==========================================
 web_app = Flask('')
 
@@ -123,7 +124,7 @@ def total_users():
     con = connect()
     cur = con.cursor()
     cur.execute("SELECT COUNT(*) FROM users")
-    count = cur.fetchone()[0]
+    count = cur.fetchone()
     con.close()
     return count
 
@@ -160,7 +161,7 @@ def activate_premium(user_id, days):
     con.close()
 
 # ==========================================
-# BUTTON HANDLERS (CLEAN FORMATTING FIXED)
+# BUTTON HANDLERS (ORIGINAL ASLI EMOJIS ADDED)
 # ==========================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
