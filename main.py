@@ -27,11 +27,11 @@ VEHICLE_API_URL = config.VEHICLE_API_URL
 API_URL = config.API_URL
 
 BOT_USERNAME_SIGNATURE = "@TYAGI_NUMBER_INFO_BOT"
-GROQ_API_KEY = "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"
+GROQ_API_KEY = config.GROQ_API_KEY
 
 try:
     ai_client = Groq(api_key=GROQ_API_KEY)
-    # Bilkul naya working active model ID set kiya hai jo decommissioned nahi hai
+    # Active open-source stable model ID
     AI_MODEL = "openai/gpt-oss-20b" 
 except Exception:
     ai_client = None
@@ -207,4 +207,5 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lambda: ai_client.chat.completions.create(
                     messages=[
                         {"role": "system", "content": "You are a helpful assistant. Keep responses sweet, clean, and useful."},
-    
+                        {"role": "user", "content": user_input}
+                    ],
