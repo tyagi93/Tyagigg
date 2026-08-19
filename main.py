@@ -103,3 +103,89 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("🤖 AI Chat Search Mode Active!\nAb aap mujhse koi bhi sawal pooch sakte hain, main uska jwab dunga.")
     elif query.data == "menu_info":
         await query.message.reply_text("📋 Menu configuration active.")
+        elif query.data == "profile":
+        await query.message.reply_text(f"👤 Profile Info\n\nUser ID: {user_id}\nBot: {BOT_USERNAME_SIGNATURE}")
+    elif query.data == "premium":
+        await query.message.reply_text(f"⭐ Premium Subscription ke liye message karein: {SUPPORT}")
+
+# ==========================================
+# FINAL SAFE TRAFFIC ROUTER
+# ==========================================
+async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    user_input = update.message.text.strip()
+    state = USER_STATES.get(user_id)
+
+    # Strict Check: Pehle button click karna zaroori hai
+    if not state:
+        await update.message.reply_text("⚠️ Notice: Kripya pehle upar diye gaye buttons mein se Number Info, Vehicle Info ya AI Search select karein!")
+        return
+
+    # ---------------- TELEPHONE SEARCH ----------------
+    if state == "NUMBER_SEARCH":
+        if not user_input.isdigit() or len(user_input) != 10:
+            await update.message.reply_text("❌ Error: Kripya sirf 10-digit mobile number enter karein.")
+            return
+        await update.message.reply_text("🔍 Status: Searching phone records...")
+        try:
+            # Fixed URL parameter integration schema
+            full_target_url = f"{API_URL}&search={user_input}"
+            r = requests.get(full_target_url, timeout=20)
+            if r.status_code == 200:
+                await update.message.reply_text(f"📊 Search Result:\n\n{r.text[:1500]}")
+            else:
+                await update.message.reply_text(f"⚠️ API Error (Status: {r.status_code})")
+        except Exception as e:
+            await update.message.reply_text(f"⚠️ Connection Error: {e}")
+        USER_STATES[user_id] = None 
+        return
+
+    # ---------------- VEHICLE SEARCH ----------------
+    elif state == "VEHICLE_SEARCH":
+        clean_vehicle = user_input.replace(" ", "").upper()
+        await update.message.reply_text(f"🚗 Status: Fetching details for vehicle {clean_vehicle}...")
+        try:
+            r = requests.get(VEHICLE_API_URL + clean_vehicle, timeout=20)
+            if r.status_code == 200:
+                await update.message.reply_text(f"📊 Vehicle Result:\n\n{r.text[:1500]}")
+            else:
+                await update.message.reply_text(f"⚠️ Vehicle API Error (Status: {r.status_code})")
+        except Exception as e:
+            await update.message.reply_text(f"⚠️ Connection Error: {e}")
+        USER_STATES[user_id] = None 
+        return
+
+    # ---------------- WORKING FREE AI SEARCH ----------------
+    elif state == "AI_SEARCH":
+        if not ai_client:
+            await update.message.reply_text("⚠️ AI System Error: Groq client system authorization failed.")
+            return
+            
+        await context.bot.send_chat_action(chat_id=user_id, action="typing")
+        try:
+            # Groq fast Llama 3.3 call jo har sawal ka answer degi
+            chat_completion = ai_client.chat.completions.create(
+                messages=[{"role": "user", "content": user_input}],
+                model="llama-3.3-70b-versatile",
+            )
+            reply = chat_completion.choices.message.content
+            await update.message.reply_text(reply)
+        except Exception as e:
+            await update.message.reply_text(f"⚠️ AI Server Error: {e}")
+        USER_STATES[user_id] = None 
+        return
+
+if name == "main":
+    create_tables()
+    keep_alive()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(buttons))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
+    
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(app.initialize())
+    loop.run_until_complete(app.updater.start_polling(drop_pending_updates=True))
+    loop.run_until_complete(app.start())
+    loop.run_forever()
