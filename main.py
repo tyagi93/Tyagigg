@@ -14,7 +14,6 @@ from telegram.ext import (
     filters,
     ContextTypes
 )
-from groq import Groq
 
 # ━━━━━━━━━━━━━━━━━━━━ CONFIG IMPORT ━━━━━━━━━━━━━━━━━━━━
 import config
@@ -27,16 +26,6 @@ VEHICLE_API_URL = config.VEHICLE_API_URL
 API_URL = config.API_URL
 
 BOT_USERNAME_SIGNATURE = "@TYAGI_NUMBER_INFO_BOT"
-GROQ_API_KEY = config.GROQ_API_KEY
-
-try:
-    ai_client = Groq(api_key=GROQ_API_KEY)
-    # Active open-source stable model ID
-    AI_MODEL = "openai/gpt-oss-20b" 
-except Exception:
-    ai_client = None
-    AI_MODEL = None
-
 DB = "bot.db"
 USER_STATES = {}
 
@@ -70,10 +59,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     add_user(user.id, user.username)
     USER_STATES[user.id] = None 
     
+    # AI button ko poori tarah menu se hata diya gaya hai
     keyboard = [
         [InlineKeyboardButton("📋 Menu", callback_data="menu_info")],
         [InlineKeyboardButton("🔍 Number Info", callback_data="lookup_mode"), InlineKeyboardButton("🚗 Vehicle Info", callback_data="vehicle_mode")],
-        [InlineKeyboardButton("🤖 AI Search", callback_data="ai_mode")], 
         [InlineKeyboardButton("👤 Profile", callback_data="profile"), InlineKeyboardButton("⭐ Premium", callback_data="premium")]
     ]
     await update.message.reply_text(
@@ -92,9 +81,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "vehicle_mode":
         USER_STATES[user_id] = "VEHICLE_SEARCH"
         await query.message.reply_text("🚗 Vehicle Info Mode Active!\nKripya apna gaadi ka number send karein (e.g. UK04AQ9000).")
-    elif query.data == "ai_mode":
-        USER_STATES[user_id] = "AI_SEARCH"
-        await query.message.reply_text("🤖 AI Chat Search Mode Active!\nAb aap mujhse koi bhi sawal pooch sakte hain.")
     elif query.data == "menu_info":
         await query.message.reply_text("📋 Menu active.")
     elif query.data == "profile":
@@ -192,20 +178,16 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         USER_STATES[user_id] = None 
         return
 
-    # 3. AI SEARCH
-    elif state == "AI_SEARCH":
-        if not ai_client:
-            await update.message.reply_text("⚠️ AI Client Configuration Error!")
-            USER_STATES[user_id] = None
-            return
-            
-        typing_msg = await update.message.reply_text("🤖 Typing...")
-        try:
-            loop = asyncio.get_event_loop()
-            chat_completion = await loop.run_in_executor(
-                None,
-                lambda: ai_client.chat.completions.create(
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant. Keep responses sweet, clean, and useful."},
-                        {"role": "user", "content": user_input}
-                    ],
+if __name__ == "__main__":
+    create_tables()
+    keep_alive()
+    
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(buttons))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_input))
+    
+    print("Bot is up and running successfully!")
+    app.run_polling()
+    
