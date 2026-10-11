@@ -2,7 +2,7 @@ import sqlite3
 from telebot import TeleBot, types
 
 # ==========================================
-# ⚙️ CONFIGURATION (ALL PUBLIC CHANNELS)
+# ⚙️ CONFIGURATION & 4 CHANNELS
 # ==========================================
 BOT_TOKEN = "8620675983:AAGJUNNSOcQ043ADLYai4LW9GU8hJZZBYqk"
 BOT_NAME = "Deepak redeem code"
@@ -13,28 +13,22 @@ SUPPORT_USERNAME = "Tyagizbg"
 PER_REFER_BONUS = 3.0
 CODE_COST = 10.0
 
-# Saare channels public usernames ke sath
-# Bot ko in sabhi channels me Administrator zaroor banayein!
 CHANNELS = [
     {
         "name": "Join Deepak Channel 1",
-        "chat_id": "@itzdeepakisking",
-        "url": "https://t.me/itzdeepakisking"
+        "url": "https://t.me/itzdeepakisking?livestream=51fd857879b74b2af7"
     },
     {
         "name": "Join Deepak Channel 2",
-        "chat_id": "@itzdeepakisking",  # Agar naya public username hai toh yahan replace karein
-        "url": "https://t.me/itzdeepakisking"
+        "url": "https://t.me/+xObMfd9OJvs4OWFl"
     },
     {
         "name": "Join Rich Paid Mod Hub",
-        "chat_id": "@Richpaidmodhub",
         "url": "https://t.me/Richpaidmodhub"
     },
     {
         "name": "Join Deepak Channel 4",
-        "chat_id": "@Richpaidmodhub",  # Agar naya public username hai toh yahan replace karein
-        "url": "https://t.me/Richpaidmodhub"
+        "url": "https://t.me/+2jedZDCLLxVkMDQ1"
     }
 ]
 
@@ -54,7 +48,7 @@ INITIAL_CODES = [
 ]
 
 # ==========================================
-# 🗄️ DATABASE SETUP
+# 🗄️ DATABASE (NO LOCK FIX)
 # ==========================================
 DB_NAME = "bot_data.db"
 
@@ -90,6 +84,16 @@ def init_db():
             cursor.execute("INSERT OR IGNORE INTO stock_codes (code, amount, is_claimed) VALUES (?, ?, 0)", (code, amt))
         conn.commit()
 
+def add_code_to_stock(code, amount):
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO stock_codes (code, amount, is_claimed) VALUES (?, ?, 0)", (code, amount))
+            conn.commit()
+            return True
+    except sqlite3.IntegrityError:
+        return False
+
 init_db()
 bot = TeleBot(BOT_TOKEN)
 
@@ -99,17 +103,14 @@ except Exception:
     pass
 
 # ==========================================
-# 🔍 100% STRICT PUBLIC CHANNELS CHECK
+# ⚡ AUTO-APPROVE REQUESTS (Private Channels)
 # ==========================================
-def check_user_joined_all(user_id):
-    for ch in CHANNELS:
-        try:
-            member = bot.get_chat_member(ch["chat_id"], user_id)
-            if member.status in ['left', 'kicked']:
-                return False
-        except Exception:
-            return False
-    return True
+@bot.chat_join_request_handler()
+def approve_join_request(update: types.ChatJoinRequest):
+    try:
+        bot.approve_chat_join_request(update.chat.id, update.from_user.id)
+    except Exception:
+        pass
 
 def join_channels_keyboard():
     markup = types.InlineKeyboardMarkup(row_width=2)
@@ -166,7 +167,7 @@ def start_cmd(message):
         else:
             is_verified = user[0]
 
-    if is_verified == 0 or not check_user_joined_all(user_id):
+    if is_verified == 0:
         text = (
             "🔒 **ACCESS REQUIRED**\n\n"
             "Join the channel(s) below to use this bot:\n\n"
@@ -201,51 +202,48 @@ def handle_callbacks(call):
     user_id = call.from_user.id
 
     if call.data == "verify_action":
-        if check_user_joined_all(user_id):
-            ref_to_notify = None
-            new_ref_bal = 0
-            new_ref_count = 0
+        ref_to_notify = None
+        new_ref_bal = 0
+        new_ref_count = 0
 
-            with get_connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT referrer_id, is_verified FROM users WHERE user_id = ?", (user_id,))
-                user_info = cursor.fetchone()
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT referrer_id, is_verified FROM users WHERE user_id = ?", (user_id,))
+            user_info = cursor.fetchone()
 
-                if user_info:
-                    referrer_id, is_verified = user_info[0], user_info[1]
+            if user_info:
+                referrer_id, is_verified = user_info[0], user_info[1]
 
-                    if is_verified == 0:
-                        cursor.execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
-                        if referrer_id:
-                            cursor.execute("UPDATE users SET balance = balance + ?, total_referred = total_referred + 1 WHERE user_id = ?", (PER_REFER_BONUS, referrer_id))
-                            cursor.execute("SELECT balance, total_referred FROM users WHERE user_id = ?", (referrer_id,))
-                            referrer_data = cursor.fetchone()
-                            if referrer_data:
-                                ref_to_notify = referrer_id
-                                new_ref_bal = int(referrer_data[0])
-                                new_ref_count = referrer_data[1]
-                        conn.commit()
+                if is_verified == 0:
+                    cursor.execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
+                    if referrer_id:
+                        cursor.execute("UPDATE users SET balance = balance + ?, total_referred = total_referred + 1 WHERE user_id = ?", (PER_REFER_BONUS, referrer_id))
+                        cursor.execute("SELECT balance, total_referred FROM users WHERE user_id = ?", (referrer_id,))
+                        referrer_data = cursor.fetchone()
+                        if referrer_data:
+                            ref_to_notify = referrer_id
+                            new_ref_bal = int(referrer_data[0])
+                            new_ref_count = referrer_data[1]
+                    conn.commit()
 
-            if ref_to_notify:
-                ref_msg = (
-                    "✨ **REFER BONUS CREDITED!**\n\n"
-                    "✨ A new user joined using your link.\n"
-                    f"✨ Bonus: ₹{int(PER_REFER_BONUS)}\n"
-                    f"✨ New Balance: ₹{new_ref_bal}\n"
-                    f"✨ Total Referred: {new_ref_count}"
-                )
-                try:
-                    bot.send_message(ref_to_notify, ref_msg, parse_mode="Markdown")
-                except Exception:
-                    pass
-
+        if ref_to_notify:
+            ref_msg = (
+                "✨ **REFER BONUS CREDITED!**\n\n"
+                "✨ A new user joined using your link.\n"
+                f"✨ Bonus: ₹{int(PER_REFER_BONUS)}\n"
+                f"✨ New Balance: ₹{new_ref_bal}\n"
+                f"✨ Total Referred: {new_ref_count}"
+            )
             try:
-                bot.delete_message(call.message.chat.id, call.message.message_id)
+                bot.send_message(ref_to_notify, ref_msg, parse_mode="Markdown")
             except Exception:
                 pass
-            send_home_screen(user_id)
-        else:
-            bot.answer_callback_query(call.id, "❌ Pehle saare 4 channels join karein tabhi verify hoga!", show_alert=True)
+
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except Exception:
+            pass
+        send_home_screen(user_id)
 
     elif call.data == "menu_refer":
         with get_connection() as conn:
@@ -348,7 +346,25 @@ def handle_callbacks(call):
         text = "✨ **MAIN MENU**\n\nChoose an option:"
         bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=main_menu_keyboard())
 
+@bot.message_handler(commands=['addcode'])
+def add_code_cmd(message):
+    if message.from_user.id != ADMIN_ID:
+        return
+    parts = message.text.split()
+    if len(parts) == 3:
+        code_str = parts[1].strip()
+        try:
+            amt = float(parts[2])
+            if add_code_to_stock(code_str, amt):
+                bot.reply_to(message, f"✅ Code `{code_str}` (₹{int(amt)}) stock me add ho gaya!", parse_mode="Markdown")
+            else:
+                bot.reply_to(message, "⚠️ Yeh code pehle se stock me available hai.")
+        except ValueError:
+            bot.reply_to(message, "❌ Invalid format! Example: `/addcode 4FXYDYVXTL56JPZM 10`", parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "❌ Sahi format: `/addcode <CODE> <AMOUNT>`", parse_mode="Markdown")
+
 if __name__ == "__main__":
-    print("🚀 Deepak Redeem Code Bot successfully running...")
-    bot.infinity_polling(allowed_updates=['message', 'callback_query'], timeout=20)
+    print("🚀 Deepak Redeem Code Bot running...")
+    bot.infinity_polling(allowed_updates=['message', 'callback_query', 'chat_join_request'], timeout=20)
     
