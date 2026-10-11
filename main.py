@@ -56,52 +56,51 @@ INITIAL_CODES = [
 ]
 
 # ==========================================
-# 🗄️ DATABASE SETUP
+# 🗄️ DATABASE SETUP (NO LOCK FIX)
 # ==========================================
 DB_NAME = "bot_data.db"
 
 def get_connection():
-    return sqlite3.connect(DB_NAME, check_same_thread=False)
+    conn = sqlite3.connect(DB_NAME, timeout=30.0, check_same_thread=False)
+    conn.execute("PRAGMA journal_mode=WAL;")  # Lock prevent karne ke liye WAL mode
+    return conn
 
 def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
-        user_id INTEGER PRIMARY KEY,
-        referrer_id INTEGER,
-        balance REAL DEFAULT 0.0,
-        total_referred INTEGER DEFAULT 0,
-        is_verified INTEGER DEFAULT 0,
-        has_claimed INTEGER DEFAULT 0
-    )''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS redeemed_history (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        code TEXT,
-        amount REAL
-    )''')
-    cursor.execute('''CREATE TABLE IF NOT EXISTS stock_codes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        code TEXT UNIQUE,
-        amount REAL,
-        is_claimed INTEGER DEFAULT 0
-    )''')
-    for code, amt in INITIAL_CODES:
-        cursor.execute("INSERT OR IGNORE INTO stock_codes (code, amount, is_claimed) VALUES (?, ?, 0)", (code, amt))
-    conn.commit()
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+            user_id INTEGER PRIMARY KEY,
+            referrer_id INTEGER,
+            balance REAL DEFAULT 0.0,
+            total_referred INTEGER DEFAULT 0,
+            is_verified INTEGER DEFAULT 0,
+            has_claimed INTEGER DEFAULT 0
+        )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS redeemed_history (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            code TEXT,
+            amount REAL
+        )''')
+        cursor.execute('''CREATE TABLE IF NOT EXISTS stock_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE,
+            amount REAL,
+            is_claimed INTEGER DEFAULT 0
+        )''')
+        for code, amt in INITIAL_CODES:
+            cursor.execute("INSERT OR IGNORE INTO stock_codes (code, amount, is_claimed) VALUES (?, ?, 0)", (code, amt))
+        conn.commit()
 
 def add_code_to_stock(code, amount):
-    conn = get_connection()
-    cursor = conn.cursor()
     try:
-        cursor.execute("INSERT INTO stock_codes (code, amount, is_claimed) VALUES (?, ?, 0)", (code, amount))
-        conn.commit()
-        return True
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO stock_codes (code, amount, is_claimed) VALUES (?, ?, 0)", (code, amount))
+            conn.commit()
+            return True
     except sqlite3.IntegrityError:
         return False
-    finally:
-        conn.close()
 
 init_db()
 bot = TeleBot(BOT_TOKEN)
@@ -120,7 +119,6 @@ def approve_join_request(update: types.ChatJoinRequest):
 # 🔍 DIRECT VERIFY LOGIC
 # ==========================================
 def check_user_joined(user_id):
-    # Public channels strictly check honge
     for ch in CHANNELS:
         if not ch["is_private"] and ch["chat_id"]:
             try:
@@ -129,7 +127,6 @@ def check_user_joined(user_id):
                     return False
             except Exception:
                 pass
-    # Private channels direct pass-through rahenge taaki request bhejte hi verify ho jaye
     return True
 
 def join_channels_keyboard():
@@ -162,23 +159,22 @@ def start_cmd(message):
     user_id = message.from_user.id
     args = message.text.split()
     
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT is_verified FROM users WHERE user_id = ?", (user_id,))
-    user = cursor.fetchone()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT is_verified FROM users WHERE user_id = ?", (user_id,))
+        user = cursor.fetchone()
 
-    referrer = None
-    if not user:
-        if len(args) > 1 and args[1].startswith("ref_"):
-            try:
-                referrer = int(args[1].replace("ref_", ""))
-                if referrer == user_id:
+        referrer = None
+        if not user:
+            if len(args) > 1 and args[1].startswith("ref_"):
+                try:
+                    referrer = int(args[1].replace("ref_", ""))
+                    if referrer == user_id:
+                        referrer = None
+                except ValueError:
                     referrer = None
-            except ValueError:
-                referrer = None
-        cursor.execute("INSERT INTO users (user_id, referrer_id, balance, total_referred, is_verified, has_claimed) VALUES (?, ?, 0, 0, 0, 0)", (user_id, referrer))
-        conn.commit()
-    conn.close()
+            cursor.execute("INSERT INTO users (user_id, referrer_id, balance, total_referred, is_verified, has_claimed) VALUES (?, ?, 0, 0, 0, 0)", (user_id, referrer))
+            conn.commit()
 
     if not check_user_joined(user_id):
         text = (
@@ -188,19 +184,17 @@ def start_cmd(message):
         )
         bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=join_channels_keyboard())
     else:
-        conn = get_connection()
-        conn.cursor().execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
-        conn.commit()
-        conn.close()
+        with get_connection() as conn:
+            conn.cursor().execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
+            conn.commit()
         send_home_screen(user_id)
 
 def send_home_screen(user_id):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    bal = int(row[0]) if row else 0
-    conn.close()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        bal = int(row[0]) if row else 0
 
     text = (
         "✅ **Verified!**\n\n"
@@ -237,33 +231,36 @@ def handle_callbacks(call):
 
     if call.data == "verify_action":
         if check_user_joined(user_id):
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT referrer_id, is_verified FROM users WHERE user_id = ?", (user_id,))
-            data = cursor.fetchone()
-            
-            if data and data[1] == 0:
-                ref_id = data[0]
-                if ref_id:
-                    cursor.execute("UPDATE users SET balance = balance + ?, total_referred = total_referred + 1 WHERE user_id = ?", (PER_REFER_BONUS, ref_id))
-                    cursor.execute("SELECT balance, total_referred FROM users WHERE user_id = ?", (ref_id,))
-                    ref_data = cursor.fetchone()
+            ref_id_to_notify = None
+            ref_data_to_send = None
+
+            with get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT referrer_id, is_verified FROM users WHERE user_id = ?", (user_id,))
+                data = cursor.fetchone()
+                
+                if data and data[1] == 0:
+                    ref_id = data[0]
+                    if ref_id:
+                        cursor.execute("UPDATE users SET balance = balance + ?, total_referred = total_referred + 1 WHERE user_id = ?", (PER_REFER_BONUS, ref_id))
+                        cursor.execute("SELECT balance, total_referred FROM users WHERE user_id = ?", (ref_id,))
+                        ref_data_to_send = cursor.fetchone()
+                        ref_id_to_notify = ref_id
+                    cursor.execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
                     conn.commit()
 
-                    ref_msg = (
-                        "✨ **REFER BONUS CREDITED!**\n\n"
-                        "✨ A new user joined using your link.\n"
-                        f"✨ Bonus: ₹{int(PER_REFER_BONUS)}\n"
-                        f"✨ New Balance: ₹{int(ref_data[0])}\n"
-                        f"✨ Total Referred: {ref_data[1]}"
-                    )
-                    try:
-                        bot.send_message(ref_id, ref_msg, parse_mode="Markdown")
-                    except Exception:
-                        pass
-                cursor.execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
-                conn.commit()
-            conn.close()
+            if ref_id_to_notify and ref_data_to_send:
+                ref_msg = (
+                    "✨ **REFER BONUS CREDITED!**\n\n"
+                    "✨ A new user joined using your link.\n"
+                    f"✨ Bonus: ₹{int(PER_REFER_BONUS)}\n"
+                    f"✨ New Balance: ₹{int(ref_data_to_send[0])}\n"
+                    f"✨ Total Referred: {ref_data_to_send[1]}"
+                )
+                try:
+                    bot.send_message(ref_id_to_notify, ref_msg, parse_mode="Markdown")
+                except Exception:
+                    pass
 
             try:
                 bot.delete_message(call.message.chat.id, call.message.message_id)
@@ -274,11 +271,10 @@ def handle_callbacks(call):
             bot.answer_callback_query(call.id, "❌ Pehle channels join karein!", show_alert=True)
 
     elif call.data == "menu_refer":
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT total_referred, balance FROM users WHERE user_id = ?", (user_id,))
-        row = cursor.fetchone()
-        conn.close()
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT total_referred, balance FROM users WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
         
         ref_count, bal = row if row else (0, 0.0)
         ref_link = f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
@@ -294,64 +290,62 @@ def handle_callbacks(call):
         bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=back_keyboard())
 
     elif call.data == "menu_getcode":
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT balance, has_claimed FROM users WHERE user_id = ?", (user_id,))
-        user_row = cursor.fetchone()
-        bal = user_row[0] if user_row else 0
-        has_claimed = user_row[1] if user_row else 0
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT balance, has_claimed FROM users WHERE user_id = ?", (user_id,))
+            user_row = cursor.fetchone()
+            bal = user_row[0] if user_row else 0
+            has_claimed = user_row[1] if user_row else 0
 
-        cursor.execute("SELECT id, code, amount FROM stock_codes WHERE is_claimed = 0 LIMIT 1")
-        code_row = cursor.fetchone()
+            cursor.execute("SELECT id, code, amount FROM stock_codes WHERE is_claimed = 0 LIMIT 1")
+            code_row = cursor.fetchone()
 
-        if has_claimed == 1:
-            text = (
-                "⚠️ **LIMIT REACHED!**\n\n"
-                "Aap pehle hi apna 1 code claim kar chuke hain.\n"
-                "Ek user sirf 1 hi code le sakta hai.\n\n"
-                f"💰 **Aapka Balance:** ₹{int(bal)}"
-            )
-        elif bal < CODE_COST:
-            text = (
-                "⚠️ **INSUFFICIENT BALANCE!**\n\n"
-                f"Redeem code lene ke liye kam se kam ₹{int(CODE_COST)} chahiye.\n"
-                f"💰 **Aapka Current Balance:** ₹{int(bal)}\n\n"
-                "Friends ko refer karein aur balance badhayein!"
-            )
-        elif not code_row:
-            text = (
-                "👾 **No codes available right now.**\n\n"
-                "Codes jald hi add kiye jayenge. Stock refill hone ka wait karein.\n"
-                f"💰 **Aapka Balance:** ₹{int(bal)}"
-            )
-        else:
-            c_id, code_text, amt = code_row
-            cursor.execute("UPDATE stock_codes SET is_claimed = 1 WHERE id = ?", (c_id,))
-            cursor.execute("UPDATE users SET balance = balance - ?, has_claimed = 1 WHERE user_id = ?", (CODE_COST, user_id))
-            cursor.execute("INSERT INTO redeemed_history (user_id, code, amount) VALUES (?, ?, ?)", (user_id, code_text, amt))
-            conn.commit()
+            if has_claimed == 1:
+                text = (
+                    "⚠️ **LIMIT REACHED!**\n\n"
+                    "Aap pehle hi apna 1 code claim kar chuke hain.\n"
+                    "Ek user sirf 1 hi code le sakta hai.\n\n"
+                    f"💰 **Aapka Balance:** ₹{int(bal)}"
+                )
+            elif bal < CODE_COST:
+                text = (
+                    "⚠️ **INSUFFICIENT BALANCE!**\n\n"
+                    f"Redeem code lene ke liye kam se kam ₹{int(CODE_COST)} chahiye.\n"
+                    f"💰 **Aapka Current Balance:** ₹{int(bal)}\n\n"
+                    "Friends ko refer karein aur balance badhayein!"
+                )
+            elif not code_row:
+                text = (
+                    "👾 **No codes available right now.**\n\n"
+                    "Codes jald hi add kiye jayenge. Stock refill hone ka wait karein.\n"
+                    f"💰 **Aapka Balance:** ₹{int(bal)}"
+                )
+            else:
+                c_id, code_text, amt = code_row
+                cursor.execute("UPDATE stock_codes SET is_claimed = 1 WHERE id = ?", (c_id,))
+                cursor.execute("UPDATE users SET balance = balance - ?, has_claimed = 1 WHERE user_id = ?", (CODE_COST, user_id))
+                cursor.execute("INSERT INTO redeemed_history (user_id, code, amount) VALUES (?, ?, ?)", (user_id, code_text, amt))
+                conn.commit()
 
-            cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-            new_bal = cursor.fetchone()[0]
+                cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+                new_bal = cursor.fetchone()[0]
 
-            text = (
-                "🎉 **CODE REDEEMED SUCCESSFULLY!**\n\n"
-                f"✨ Code: `{code_text}` — ₹{int(amt)}\n"
-                f"💰 **Remaining Balance:** ₹{int(new_bal)}"
-            )
+                text = (
+                    "🎉 **CODE REDEEMED SUCCESSFULLY!**\n\n"
+                    f"✨ Code: `{code_text}` — ₹{int(amt)}\n"
+                    f"💰 **Remaining Balance:** ₹{int(new_bal)}"
+                )
 
-        conn.close()
         bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=back_keyboard())
 
     elif call.data == "menu_history":
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
-        bal = cursor.fetchone()[0]
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+            bal = cursor.fetchone()[0]
 
-        cursor.execute("SELECT code, amount FROM redeemed_history WHERE user_id = ? ORDER BY id DESC", (user_id,))
-        history_rows = cursor.fetchall()
-        conn.close()
+            cursor.execute("SELECT code, amount FROM redeemed_history WHERE user_id = ? ORDER BY id DESC", (user_id,))
+            history_rows = cursor.fetchall()
 
         if not history_rows:
             history_str = "   ✨ No codes yet."
@@ -379,4 +373,4 @@ def handle_callbacks(call):
 if __name__ == "__main__":
     print("🚀 Deepak Redeem Code Bot successfully running...")
     bot.infinity_polling(allowed_updates=['message', 'callback_query', 'chat_join_request'])
-        
+    
