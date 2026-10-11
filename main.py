@@ -1,259 +1,260 @@
-import asyncio
-import sqlite3
-import requests
-import re
-from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    CallbackQueryHandler,
-    MessageHandler,
-    filters,
-    ContextTypes
-)
+from telebot import TeleBot, types
+import config
+import database
 
-# Config file se variables import ho rahe hain
-from config import BOT_TOKEN, ADMIN_ID, NUMBER_API_URL, VEHICLE_API_URL, BOT_NAME, SUPPORT
-ADMIN_ID = int(ADMIN_ID)
-DB = "bot.db"
+database.init_db()
+bot = TeleBot(config.BOT_TOKEN)
 
-# ==========================================
-# DATABASE LOGIC
-# ==========================================
-def connect():
-    return sqlite3.connect(DB)
+def check_user_joined(user_id):
+    for ch in config.CHANNELS:
+        try:
+            member = bot.get_chat_member(ch["chat_id"], user_id)
+            if member.status in ['left', 'kicked']:
+                return False
+        except Exception:
+            return False
+    return True
 
-def create_tables():
-    con = connect()
-    cur = con.cursor()
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS users(
-        user_id INTEGER PRIMARY KEY,
-        username TEXT,
-        first_name TEXT,
-        free_try INTEGER DEFAULT 3,
-        premium INTEGER DEFAULT 0,
-        premium_expiry TEXT,
-        join_date TEXT
-    )
-    """)
-    cur.execute("""
-    CREATE TABLE IF NOT EXISTS history(
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER,
-        number TEXT,
-        result TEXT,
-        date TEXT
-    )
-    """)
-    con.commit()
-    con.close()
+def join_channels_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    btns = [types.InlineKeyboardButton(f"🔹 {ch['name']}", url=ch["url"]) for ch in config.CHANNELS]
+    markup.add(*btns)
+    markup.add(types.InlineKeyboardButton("✅ Verify Joined", callback_data="verify_action"))
+    return markup
 
-def add_user(user_id, username, first_name):
-    con = connect()
-    cur = con.cursor()
-    cur.execute("INSERT OR IGNORE INTO users (user_id, username, first_name, join_date) VALUES (?, ?, ?, ?)",
-                (user_id, username, first_name, datetime.now().strftime("%Y-%m-%d")))
-    con.commit()
-    con.close()
+def main_menu_keyboard():
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    b1 = types.InlineKeyboardButton("🎁 Refer", callback_data="menu_refer")
+    b2 = types.InlineKeyboardButton("💳 Get Code", callback_data="menu_getcode")
+    b3 = types.InlineKeyboardButton("💖 Support", callback_data="menu_support")
+    b4 = types.InlineKeyboardButton("📜 My History", callback_data="menu_history")
+    markup.add(b1, b2)
+    markup.add(b3, b4)
+    return markup
 
-def get_user(user_id):
-    con = connect()
-    cur = con.cursor()
-    cur.execute("SELECT * FROM users WHERE user_id=?", (user_id,))
-    row = cur.fetchone()
-    con.close()
-    return row
+def back_keyboard():
+    markup = types.InlineKeyboardMarkup()
+    markup.add(types.InlineKeyboardButton("◀️ Back", callback_data="menu_back"))
+    return markup
 
-def reduce_try(user_id):
-    con = connect()
-    cur = con.cursor()
-    cur.execute("UPDATE users SET free_try = free_try - 1 WHERE user_id=?", (user_id,))
-    con.commit()
-    con.close()
+@bot.message_handler(commands=['start'])
+def start_cmd(message):
+    user_id = message.from_user.id
+    args = message.text.split()
+    
+    conn = database.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    user = cursor.fetchone()
 
-def add_history(user_id, number, result):
-    con = connect()
-    cur = con.cursor()
-    cur.execute("INSERT INTO history (user_id, number, result, date) VALUES (?, ?, ?, ?)",
-                (user_id, number, result, datetime.now().strftime("%Y-%m-%d %H:%M")))
-    con.commit()
-    con.close()
+    referrer = None
+    if not user:
+        if len(args) > 1 and args[1].startswith("ref_"):
+            try:
+                referrer = int(args[1].replace("ref_", ""))
+                if referrer == user_id:
+                    referrer = None
+            except ValueError:
+                referrer = None
+        # Default starting balance = 0
+        cursor.execute("INSERT INTO users (user_id, referrer_id, balance, total_referred, is_verified, has_claimed) VALUES (?, ?, 0, 0, 0, 0)", (user_id, referrer))
+        conn.commit()
+    conn.close()
 
-def history(user_id):
-    con = connect()
-    cur = con.cursor()
-    cur.execute("SELECT number, date FROM history WHERE user_id=? ORDER BY id DESC LIMIT 10", (user_id,))
-    rows = cur.fetchall()
-    con.close()
-    return rows
-
-def total_users():
-    con = connect()
-    cur = con.cursor()
-    cur.execute("SELECT COUNT(*) FROM users")
-    count = cur.fetchone()[0]
-    con.close()
-    return count
-
-# ==========================================
-# PREMIUM LOGIC
-# ==========================================
-def activate_premium(user_id, days):
-    con = connect()
-    cur = con.cursor()
-    if str(days).lower() == "lifetime":
-        expiry = "Lifetime"
+    if not check_user_joined(user_id):
+        text = (
+            "🔒 **ACCESS REQUIRED**\n\n"
+            "Join the channel(s) below to use this bot:\n\n"
+            "🔔 **Refer bonus milega sirf tab jab aap saare channels join kar ke Verify dabayein.**"
+        )
+        bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=join_channels_keyboard())
     else:
-        expiry = (datetime.now() + timedelta(days=int(days))).strftime("%Y-%m-%d")
-    cur.execute(
-        "UPDATE users SET premium=?, premium_expiry=? WHERE user_id=?",
-        (1, expiry, user_id)
+        conn = database.get_connection()
+        conn.cursor().execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
+        conn.commit()
+        conn.close()
+        send_home_screen(user_id)
+
+def send_home_screen(user_id):
+    conn = database.get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    bal = int(row[0]) if row else 0
+    conn.close()
+
+    text = (
+        "✅ **Verified!**\n\n"
+        "🔗 No referrer attached.\n"
+        f"💰 **Balance:** ₹{bal}\n\n"
+        "Choose an option:"
     )
-    con.commit()
-    con.close()
+    bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=main_menu_keyboard())
 
-def is_premium(user_id):
-    con = connect()
-    cur = con.cursor()
-    cur.execute("SELECT premium, premium_expiry FROM users WHERE user_id=?", (user_id,))
-    row = cur.fetchone()
-    con.close()
-    if not row:
-        return False
-    premium, expiry = row
-    if premium == 0:
-        return False
-    if expiry == "Lifetime":
-        return True
-    return datetime.now().date() <= datetime.strptime(expiry, "%Y-%m-%d").date()
+# Admin Command: Naye codes dalne ke liye
+@bot.message_handler(commands=['addcode'])
+def add_code_cmd(message):
+    if message.from_user.id != config.ADMIN_ID:
+        return
+    parts = message.text.split()
+    if len(parts) == 3:
+        code_str = parts[1].strip()
+        try:
+            amt = float(parts[2])
+            if database.add_code_to_stock(code_str, amt):
+                bot.reply_to(message, f"✅ Code `{code_str}` (₹{int(amt)}) stock me add ho gaya!", parse_mode="Markdown")
+            else:
+                bot.reply_to(message, "⚠️ Yeh code pehle se stock me available hai.")
+        except ValueError:
+            bot.reply_to(message, "❌ Invalid format! Example: `/addcode 4FXYDYVXTL56JPZM 10`", parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "❌ Sahi format: `/addcode <CODE> <AMOUNT>`", parse_mode="Markdown")
 
-# ==========================================
-# BUTTON HANDLERS (ICONS ADDED)
-# ==========================================
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    add_user(user.id, user.username, user.first_name)
+@bot.callback_query_handler(func=lambda call: True)
+def handle_callbacks(call):
+    user_id = call.from_user.id
 
-    keyboard = [
-        [InlineKeyboardButton("🔎 Lookup Info", callback_data="lookup")],
-        [
-            InlineKeyboardButton("👤 Profile", callback_data="profile"),
-            InlineKeyboardButton("💎 Premium", callback_data="premium")
-        ],
-        [InlineKeyboardButton("📜 History", callback_data="history")],
-        [
-            InlineKeyboardButton("❓ Help", callback_data="help"),
-            InlineKeyboardButton("📞 Contact Support", callback_data="contact")
-        ]
-    ]
+    if call.data == "verify_action":
+        if check_user_joined(user_id):
+            conn = database.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT referrer_id, is_verified FROM users WHERE user_id = ?", (user_id,))
+            data = cursor.fetchone()
+            
+            if data and data[1] == 0:
+                ref_id = data[0]
+                if ref_id:
+                    cursor.execute("UPDATE users SET balance = balance + ?, total_referred = total_referred + 1 WHERE user_id = ?", (config.PER_REFER_BONUS, ref_id))
+                    cursor.execute("SELECT balance, total_referred FROM users WHERE user_id = ?", (ref_id,))
+                    ref_data = cursor.fetchone()
+                    conn.commit()
 
-    await update.message.reply_text(
-        f"👋 **Welcome to {BOT_NAME}**\n\n"
-        f"📝 Send a **10-digit mobile number** OR a **Vehicle Registration number** (e.g., UK04AQ9000) directly!",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode="Markdown"
-    )
+                    ref_msg = (
+                        "✨ **REFER BONUS CREDITED!**\n\n"
+                        "✨ A new user joined using your link.\n"
+                        f"✨ Bonus: ₹{int(config.PER_REFER_BONUS)}\n"
+                        f"✨ New Balance: ₹{int(ref_data[0])}\n"
+                        f"✨ Total Referred: {ref_data[1]}"
+                    )
+                    try:
+                        bot.send_message(ref_id, ref_msg, parse_mode="Markdown")
+                    except Exception:
+                        pass
+                cursor.execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
+                conn.commit()
+            conn.close()
 
-async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+            send_home_screen(user_id)
+        else:
+            bot.answer_callback_query(call.id, "❌ Pehle saare channels join karein!", show_alert=True)
 
-    if query.data == "help":
-        await query.message.reply_text("💡 **How to Use:**\n\nSimply send any valid 10-digit mobile number or vehicle plate number in chat.", parse_mode="Markdown")
-    elif query.data == "contact":
-        await query.message.reply_text(f"📞 **Contact Admin:**\nSupport: {SUPPORT}", parse_mode="Markdown")
-    elif query.data == "profile":
-        u = get_user(query.from_user.id)
-        premium_status = "✅ Premium Active" if is_premium(query.from_user.id) else "❌ Free Account"
+    elif call.data == "menu_refer":
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT total_referred, balance FROM users WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        ref_count, bal = row if row else (0, 0.0)
+        ref_link = f"https://t.me/{config.BOT_USERNAME}?start=ref_{user_id}"
+        
         text = (
-            f"👤 **Your Account Profile**\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"🆔 **User ID:** `{u[0]}`\n"
-            f"👤 **Name:** {u[2]}\n"
-            f"📊 **Free Search Left:** {u[3]}\n"
-            f"💎 **Status:** {premium_status}\n"
-            f"━━━━━━━━━━━━━━━━━━━"
+            "🎁 **REFER & EARN**\n\n"
+            f"👤 Per Refer: **₹{int(config.PER_REFER_BONUS)}**\n"
+            f"👥 Total Referred: **{ref_count}**\n"
+            f"💰 Your Balance: **₹{int(bal)}**\n\n"
+            f"🔗 **Your Refer Link:**\n`{ref_link}`\n\n"
+            "🚨 **Note:** Bonus milega jab aapka friend saare channels join kar ke Verify dabaye."
         )
-        await query.message.reply_text(text, parse_mode="Markdown")
-    elif query.data == "history":
-        rows = history(query.from_user.id)
-        if not rows:
-            await query.message.reply_text("❌ No search history found.")
-            return
-        text = "📜 **Your Last 10 Lookups:**\n━━━━━━━━━━━━━━━━━━━\n" + "\n".join([f"🔹 `{n}` — *{d}*" for n, d in rows])
-        await query.message.reply_text(text, parse_mode="Markdown")
-    elif query.data == "premium":
+        bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=back_keyboard())
+
+    elif call.data == "menu_getcode":
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT balance, has_claimed FROM users WHERE user_id = ?", (user_id,))
+        user_row = cursor.fetchone()
+        bal = user_row[0] if user_row else 0
+        has_claimed = user_row[1] if user_row else 0
+
+        cursor.execute("SELECT id, code, amount FROM stock_codes WHERE is_claimed = 0 LIMIT 1")
+        code_row = cursor.fetchone()
+
+        # Sirf 1 code lifetime limit
+        if has_claimed == 1:
+            text = (
+                "⚠️ **LIMIT REACHED!**\n\n"
+                "Aap pehle hi apna 1 code claim kar chuke hain.\n"
+                "Ek user sirf 1 hi code le sakta hai.\n\n"
+                f"💰 **Aapka Balance:** ₹{int(bal)}"
+            )
+        # Minimum ₹10 balance limit
+        elif bal < config.CODE_COST:
+            text = (
+                "⚠️ **INSUFFICIENT BALANCE!**\n\n"
+                f"Redeem code lene ke liye kam se kam ₹{int(config.CODE_COST)} chahiye.\n"
+                f"💰 **Aapka Current Balance:** ₹{int(bal)}\n\n"
+                "Friends ko refer karein aur balance badhayein!"
+            )
+        elif not code_row:
+            text = (
+                "👾 **No codes available right now.**\n\n"
+                "Codes jald hi add kiye jayenge. Stock refill hone ka wait karein.\n"
+                f"💰 **Aapka Balance:** ₹{int(bal)}"
+            )
+        else:
+            c_id, code_text, amt = code_row
+            cursor.execute("UPDATE stock_codes SET is_claimed = 1 WHERE id = ?", (c_id,))
+            cursor.execute("UPDATE users SET balance = balance - ?, has_claimed = 1 WHERE user_id = ?", (config.CODE_COST, user_id))
+            cursor.execute("INSERT INTO redeemed_history (user_id, code, amount) VALUES (?, ?, ?)", (user_id, code_text, amt))
+            conn.commit()
+
+            cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+            new_bal = cursor.fetchone()[0]
+
+            text = (
+                "🎉 **CODE REDEEMED SUCCESSFULLY!**\n\n"
+                f"✨ Code: `{code_text}` — ₹{int(amt)}\n"
+                f"💰 **Remaining Balance:** ₹{int(new_bal)}"
+            )
+
+        conn.close()
+        bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=back_keyboard())
+
+    elif call.data == "menu_history":
+        conn = database.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT balance FROM users WHERE user_id = ?", (user_id,))
+        bal = cursor.fetchone()[0]
+
+        cursor.execute("SELECT code, amount FROM redeemed_history WHERE user_id = ? ORDER BY id DESC", (user_id,))
+        history_rows = cursor.fetchall()
+        conn.close()
+
+        if not history_rows:
+            history_str = "   ✨ No codes yet."
+        else:
+            history_str = "\n".join([f"   ✨ {r[0]} — ₹{int(r[1])}" for r in history_rows])
+
         text = (
-            f"💎 **Premium Subscription Plans**\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"⏱ 1 Day ━━━━━━━━ ₹20\n"
-            f"🗓 15 Days ━━━━━━ ₹100\n"
-            f"📅 30 Days ━━━━━━ ₹150\n"
-            f"👑 Lifetime ━━━━━ ₹500\n"
-            f"━━━━━━━━━━━━━━━━━━━\n"
-            f"💬 Click on **📞 Contact Support** button or message {SUPPORT} to activate!"
+            "✨ **MY HISTORY**\n\n"
+            f"✨ **Balance:** ₹{int(bal)}\n\n"
+            f"✨ **Redeemed Codes:**\n{history_str}"
         )
-        await query.message.reply_text(text, parse_mode="Markdown")
-    elif query.data == "lookup":
-        await query.message.reply_text("📥 Please send your **10-digit mobile number** or **Vehicle ID** now:", parse_mode="Markdown")
+        bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=back_keyboard())
 
-# ==========================================
-# ADMIN PANEL COMMANDS
-# ==========================================
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Access Denied.")
-        return
-    await update.message.reply_text(
-        f"👑 **Admin Control Panel**\n\n👥 **Total Bot Users:** {total_users()}\n\n"
-        f"⚙️ **Available Commands:**\n"
-        f"🔹 `/users` — List total users\n"
-        f"🔹 `/addpremium USER_ID DAYS` — Add premium",
-        parse_mode="Markdown"
-    )
+    elif call.data == "menu_support":
+        text = "💜 **SUPPORT**\n\nContact our support team for help:"
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("📩 Contact Support", url=f"https://t.me/{config.SUPPORT_USERNAME}"))
+        markup.add(types.InlineKeyboardButton("◀️ Back", callback_data="menu_back"))
+        bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=markup)
 
-async def users(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-    con = connect()
-    cur = con.cursor()
-    cur.execute("SELECT user_id, first_name FROM users")
-    rows = cur.fetchall()
-    con.close()
+    elif call.data == "menu_back":
+        text = "✨ **MAIN MENU**\n\nChoose an option:"
+        bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=main_menu_keyboard())
 
-    if not rows:
-        await update.message.reply_text("No users found.")
-        return
-    text = "👥 **Users Database List**\n━━━━━━━━━━━━━━━━━━━\n"
-    for uid, name in rows:
-        text += f"👤 `{uid}` — {name}\n"
-    await update.message.reply_text(text, parse_mode="Markdown")
-
-async def addpremium(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        return
-    if len(context.args) < 2:
-        await update.message.reply_text("⚠️ Usage: `/addpremium USER_ID DAYS`", parse_mode="Markdown")
-        return
-    try:
-        user_id = int(context.args[0])
-        days = context.args[1]
-        activate_premium(user_id, days)
-        await update.message.reply_text(f"✅ Premium subscription updated for user `{user_id}` for `{days}` days.", parse_mode="Markdown")
-    except Exception as e:
-        await update.message.reply_text(f"❌ Error: {e}")
-
-# ==========================================
-# DUAL API LOOKUP SYSTEM (CLEANED & BEAUTIFIED)
-# ==========================================
-async def lookup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    raw_input = update.message.text.strip()
-    clean_input = re.sub(r'[\s\-]', '', raw_input) # Spaces ya symbols hatane k liye
-    
-    user_id = update.effective_user.id
-    user = get_user(user_id)
-    premium = is_premium(user_id)
-    
-    if not premium and (user and user[3] <= 0):
+if __name__ == "__main__":
+    print("🚀 Deepak Redeem Code Bot successfully running...")
+    bot.infinity_polling()
+            
