@@ -6,7 +6,7 @@ from telebot import TeleBot, types
 # ==========================================
 BOT_TOKEN = "8620675983:AAGJUNNSOcQ043ADLYai4LW9GU8hJZZBYqk"
 BOT_NAME = "Deepak redeem code"
-BOT_USERNAME = "DeepakRedeemCode_bot"
+BOT_USERNAME = "Deepakredeemcode1_bot"  # Fixed: Exact bot username updated
 ADMIN_ID = 5744767539
 SUPPORT_USERNAME = "Tyagizbg"
 
@@ -253,6 +253,7 @@ def handle_callbacks(call):
         
         ref_count = row[0] if row else 0
         bal = int(row[1]) if row else 0
+        # Corrected username link
         ref_link = f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
         
         text = (
@@ -367,4 +368,3 @@ def add_code_cmd(message):
 if __name__ == "__main__":
     print("🚀 Deepak Redeem Code Bot running...")
     bot.infinity_polling(allowed_updates=['message', 'callback_query', 'chat_join_request'], timeout=20)
-    
