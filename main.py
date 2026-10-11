@@ -17,22 +17,26 @@ CHANNELS = [
     {
         "name": "Join Deepak Channel 1",
         "chat_id": "@itzdeepakisking",
-        "url": "https://t.me/itzdeepakisking?livestream=51fd857879b74b2af7"
+        "url": "https://t.me/itzdeepakisking?livestream=51fd857879b74b2af7",
+        "is_private": False
     },
     {
         "name": "Join Deepak Channel 2",
-        "chat_id": "-100XXXXXXXXXX",
-        "url": "https://t.me/+xObMfd9OJvs4OWFl"
+        "chat_id": None,
+        "url": "https://t.me/+xObMfd9OJvs4OWFl",
+        "is_private": True
     },
     {
         "name": "Join Rich Paid Mod Hub",
         "chat_id": "@Richpaidmodhub",
-        "url": "https://t.me/Richpaidmodhub"
+        "url": "https://t.me/Richpaidmodhub",
+        "is_private": False
     },
     {
         "name": "Join Deepak Channel 4",
-        "chat_id": "-100YYYYYYYYYY",
-        "url": "https://t.me/+ueAOaVPWg_c1NmY1"
+        "chat_id": None,
+        "url": "https://t.me/+2jedZDCLLxVkMDQ1",
+        "is_private": True
     }
 ]
 
@@ -103,22 +107,35 @@ init_db()
 bot = TeleBot(BOT_TOKEN)
 
 # ==========================================
-# 🤖 BOT LOGIC & HANDLERS
+# ⚡ INSTANT AUTO-APPROVE REQUESTS
+# ==========================================
+@bot.chat_join_request_handler()
+def approve_join_request(update: types.ChatJoinRequest):
+    try:
+        bot.approve_chat_join_request(update.chat.id, update.from_user.id)
+    except Exception:
+        pass
+
+# ==========================================
+# 🔍 DIRECT VERIFY LOGIC
 # ==========================================
 def check_user_joined(user_id):
+    # Public channels strictly check honge
     for ch in CHANNELS:
-        try:
-            member = bot.get_chat_member(ch["chat_id"], user_id)
-            if member.status in ['left', 'kicked']:
-                return False
-        except Exception:
-            return False
+        if not ch["is_private"] and ch["chat_id"]:
+            try:
+                member = bot.get_chat_member(ch["chat_id"], user_id)
+                if member.status in ['left', 'kicked']:
+                    return False
+            except Exception:
+                pass
+    # Private channels direct pass-through rahenge taaki request bhejte hi verify ho jaye
     return True
 
 def join_channels_keyboard():
-    markup = types.InlineKeyboardMarkup(row_width=2)
-    btns = [types.InlineKeyboardButton(f"🔹 {ch['name']}", url=ch["url"]) for ch in CHANNELS]
-    markup.add(*btns)
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    for ch in CHANNELS:
+        markup.add(types.InlineKeyboardButton(f"🔹 {ch['name']}", url=ch["url"]))
     markup.add(types.InlineKeyboardButton("✅ Verify Joined", callback_data="verify_action"))
     return markup
 
@@ -137,6 +154,9 @@ def back_keyboard():
     markup.add(types.InlineKeyboardButton("◀️ Back", callback_data="menu_back"))
     return markup
 
+# ==========================================
+# 💬 BOT COMMANDS
+# ==========================================
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
     user_id = message.from_user.id
@@ -144,7 +164,7 @@ def start_cmd(message):
     
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT is_verified FROM users WHERE user_id = ?", (user_id,))
     user = cursor.fetchone()
 
     referrer = None
@@ -208,6 +228,9 @@ def add_code_cmd(message):
     else:
         bot.reply_to(message, "❌ Sahi format: `/addcode <CODE> <AMOUNT>`", parse_mode="Markdown")
 
+# ==========================================
+# 🔘 INLINE BUTTON HANDLERS
+# ==========================================
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
     user_id = call.from_user.id
@@ -242,10 +265,13 @@ def handle_callbacks(call):
                 conn.commit()
             conn.close()
 
-            bot.delete_message(call.message.chat.id, call.message.message_id)
+            try:
+                bot.delete_message(call.message.chat.id, call.message.message_id)
+            except Exception:
+                pass
             send_home_screen(user_id)
         else:
-            bot.answer_callback_query(call.id, "❌ Pehle saare channels join karein!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ Pehle channels join karein!", show_alert=True)
 
     elif call.data == "menu_refer":
         conn = get_connection()
@@ -351,6 +377,6 @@ def handle_callbacks(call):
         bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=main_menu_keyboard())
 
 if __name__ == "__main__":
-    print("🚀 Bot starting...")
-    bot.infinity_polling()
-    
+    print("🚀 Deepak Redeem Code Bot successfully running...")
+    bot.infinity_polling(allowed_updates=['message', 'callback_query', 'chat_join_request'])
+        
