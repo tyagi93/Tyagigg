@@ -8,35 +8,33 @@ BOT_TOKEN = "8620675983:AAGJUNNSOcQ043ADLYai4LW9GU8hJZZBYqk"
 BOT_NAME = "Deepak redeem code"
 BOT_USERNAME = "DeepakRedeemCode_bot"
 ADMIN_ID = 5744767539
-SUPPORT_USERNAME = "@Tyagizbg"
+SUPPORT_USERNAME = "Tyagizbg"
 
 PER_REFER_BONUS = 3.0
 CODE_COST = 10.0
 
+# NOTE: Agar private channels ki -100 ID abhi nahi pata, to bot crash na ho isliye None rakha hai,
+# jaise hi ID mil jaye yahan chat_id me -100xxxxxx daal dena!
 CHANNELS = [
     {
         "name": "Join Deepak Channel 1",
         "chat_id": "@itzdeepakisking",
-        "url": "https://t.me/itzdeepakisking?livestream=51fd857879b74b2af7",
-        "is_private": False
+        "url": "https://t.me/itzdeepakisking?livestream=51fd857879b74b2af7"
     },
     {
         "name": "Join Deepak Channel 2",
-        "chat_id": None,
-        "url": "https://t.me/+xObMfd9OJvs4OWFl",
-        "is_private": True
+        "chat_id": None,  # Yahan channel 2 ki -100 ID daalein (e.g., -1001234567890)
+        "url": "https://t.me/+xObMfd9OJvs4OWFl"
     },
     {
         "name": "Join Rich Paid Mod Hub",
         "chat_id": "@Richpaidmodhub",
-        "url": "https://t.me/Richpaidmodhub",
-        "is_private": False
+        "url": "https://t.me/Richpaidmodhub"
     },
     {
         "name": "Join Deepak Channel 4",
-        "chat_id": None,
-        "url": "https://t.me/+2jedZDCLLxVkMDQ1",
-        "is_private": True
+        "chat_id": None,  # Yahan channel 4 ki -100 ID daalein (e.g., -1009876543210)
+        "url": "https://t.me/+2jedZDCLLxVkMDQ1"
     }
 ]
 
@@ -92,16 +90,6 @@ def init_db():
             cursor.execute("INSERT OR IGNORE INTO stock_codes (code, amount, is_claimed) VALUES (?, ?, 0)", (code, amt))
         conn.commit()
 
-def add_code_to_stock(code, amount):
-    try:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO stock_codes (code, amount, is_claimed) VALUES (?, ?, 0)", (code, amount))
-            conn.commit()
-            return True
-    except sqlite3.IntegrityError:
-        return False
-
 init_db()
 bot = TeleBot(BOT_TOKEN)
 
@@ -121,18 +109,19 @@ def approve_join_request(update: types.ChatJoinRequest):
         pass
 
 # ==========================================
-# 🔍 CHECK USER JOINED CHANNELS
+# 🔍 100% STRICT CHANNELS CHECK
 # ==========================================
-def check_user_joined(user_id):
-    # Public channels ko API se verify karein
+def check_user_joined_all(user_id):
     for ch in CHANNELS:
-        if not ch["is_private"] and ch["chat_id"]:
+        if ch["chat_id"]:
             try:
                 member = bot.get_chat_member(ch["chat_id"], user_id)
+                # Agar user left ya kicked hai to FALSE
                 if member.status in ['left', 'kicked']:
                     return False
             except Exception:
-                pass
+                # Agar bot chat member nahi nikal pa raha ya user nahi hai
+                return False
     return True
 
 def join_channels_keyboard():
@@ -162,7 +151,7 @@ def back_keyboard():
     return markup
 
 # ==========================================
-# 💬 /start (PERFECT REFER LINK CATCH)
+# 💬 /start HANDLER
 # ==========================================
 @bot.message_handler(commands=['start'])
 def start_cmd(message):
@@ -171,16 +160,14 @@ def start_cmd(message):
     
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT is_verified, referrer_id FROM users WHERE user_id = ?", (user_id,))
+        cursor.execute("SELECT is_verified FROM users WHERE user_id = ?", (user_id,))
         user = cursor.fetchone()
 
-        # Naye user ke aane par referral link capture karna
         if not user:
             referrer_id = None
             if len(text_split) > 1 and text_split[1].startswith("ref_"):
                 try:
                     possible_ref = int(text_split[1].replace("ref_", ""))
-                    # Khud ko refer na kar sake
                     if possible_ref != user_id:
                         referrer_id = possible_ref
                 except ValueError:
@@ -192,8 +179,8 @@ def start_cmd(message):
         else:
             is_verified = user[0]
 
-    # Agar user verified nahi hai, toh channels join karne ka prompt bhejo
-    if is_verified == 0:
+    # Agar user verified nahi hai ya channels chhod diye hain:
+    if is_verified == 0 or not check_user_joined_all(user_id):
         text = (
             "🔒 **ACCESS REQUIRED**\n\n"
             "Join the channel(s) below to use this bot:\n\n"
@@ -221,14 +208,15 @@ def send_home_screen(user_id):
     bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=main_menu_keyboard())
 
 # ==========================================
-# 🔘 CALLBACK (VERIFY & REFER CREDIT)
+# 🔘 VERIFY & CALLBACK HANDLER
 # ==========================================
 @bot.callback_query_handler(func=lambda call: True)
 def handle_callbacks(call):
     user_id = call.from_user.id
 
     if call.data == "verify_action":
-        if check_user_joined(user_id):
+        # Yahan strict check ho raha hai
+        if check_user_joined_all(user_id):
             ref_to_notify = None
             new_ref_bal = 0
             new_ref_count = 0
@@ -241,10 +229,8 @@ def handle_callbacks(call):
                 if user_info:
                     referrer_id, is_verified = user_info[0], user_info[1]
 
-                    # Bonus sirf tabhi add hoga jab pehli baar verify ho raha ho
                     if is_verified == 0:
                         cursor.execute("UPDATE users SET is_verified = 1 WHERE user_id = ?", (user_id,))
-                        
                         if referrer_id:
                             cursor.execute("UPDATE users SET balance = balance + ?, total_referred = total_referred + 1 WHERE user_id = ?", (PER_REFER_BONUS, referrer_id))
                             cursor.execute("SELECT balance, total_referred FROM users WHERE user_id = ?", (referrer_id,))
@@ -255,7 +241,6 @@ def handle_callbacks(call):
                                 new_ref_count = referrer_data[1]
                         conn.commit()
 
-            # Referrer ko live bonus message bhejna
             if ref_to_notify:
                 ref_msg = (
                     "✨ **REFER BONUS CREDITED!**\n\n"
@@ -275,7 +260,7 @@ def handle_callbacks(call):
                 pass
             send_home_screen(user_id)
         else:
-            bot.answer_callback_query(call.id, "❌ Pehle dono Public channels join karein!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ Pehle saare 4 channels join karein tabhi verify hoga!", show_alert=True)
 
     elif call.data == "menu_refer":
         with get_connection() as conn:
@@ -377,24 +362,6 @@ def handle_callbacks(call):
     elif call.data == "menu_back":
         text = "✨ **MAIN MENU**\n\nChoose an option:"
         bot.edit_message_text(text, chat_id=call.message.chat.id, message_id=call.message.message_id, parse_mode="Markdown", reply_markup=main_menu_keyboard())
-
-@bot.message_handler(commands=['addcode'])
-def add_code_cmd(message):
-    if message.from_user.id != ADMIN_ID:
-        return
-    parts = message.text.split()
-    if len(parts) == 3:
-        code_str = parts[1].strip()
-        try:
-            amt = float(parts[2])
-            if add_code_to_stock(code_str, amt):
-                bot.reply_to(message, f"✅ Code `{code_str}` (₹{int(amt)}) stock me add ho gaya!", parse_mode="Markdown")
-            else:
-                bot.reply_to(message, "⚠️ Yeh code pehle se stock me available hai.")
-        except ValueError:
-            bot.reply_to(message, "❌ Invalid format! Example: `/addcode 4FXYDYVXTL56JPZM 10`", parse_mode="Markdown")
-    else:
-        bot.reply_to(message, "❌ Sahi format: `/addcode <CODE> <AMOUNT>`", parse_mode="Markdown")
 
 if __name__ == "__main__":
     print("🚀 Deepak Redeem Code Bot successfully running...")
