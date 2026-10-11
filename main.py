@@ -2,7 +2,7 @@ import sqlite3
 from telebot import TeleBot, types
 
 # ==========================================
-# ⚙️ CONFIGURATION
+# ⚙️ CONFIGURATION & 4 CHANNELS
 # ==========================================
 BOT_TOKEN = "8620675983:AAGJUNNSOcQ043ADLYai4LW9GU8hJZZBYqk"
 BOT_NAME = "Deepak redeem code"
@@ -13,6 +13,7 @@ SUPPORT_USERNAME = "DeepakSupport"
 PER_REFER_BONUS = 3.0
 CODE_COST = 10.0
 
+# Chaaro ke chaaro channels yahan maujood hain:
 CHANNELS = [
     {
         "name": "Join Deepak Channel 1",
@@ -56,13 +57,13 @@ INITIAL_CODES = [
 ]
 
 # ==========================================
-# 🗄️ DATABASE SETUP (NO LOCK FIX)
+# 🗄️ DATABASE (LOCK-FREE SETUP)
 # ==========================================
 DB_NAME = "bot_data.db"
 
 def get_connection():
     conn = sqlite3.connect(DB_NAME, timeout=30.0, check_same_thread=False)
-    conn.execute("PRAGMA journal_mode=WAL;")  # Lock prevent karne ke liye WAL mode
+    conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
 def init_db():
@@ -106,7 +107,7 @@ init_db()
 bot = TeleBot(BOT_TOKEN)
 
 # ==========================================
-# ⚡ INSTANT AUTO-APPROVE REQUESTS
+# ⚡ AUTO-APPROVE REQUESTS (Private Channels)
 # ==========================================
 @bot.chat_join_request_handler()
 def approve_join_request(update: types.ChatJoinRequest):
@@ -116,9 +117,10 @@ def approve_join_request(update: types.ChatJoinRequest):
         pass
 
 # ==========================================
-# 🔍 DIRECT VERIFY LOGIC
+# 🔍 VERIFY CHANNELS CHECK
 # ==========================================
 def check_user_joined(user_id):
+    # Public channels verify karega
     for ch in CHANNELS:
         if not ch["is_private"] and ch["chat_id"]:
             try:
@@ -129,10 +131,15 @@ def check_user_joined(user_id):
                 pass
     return True
 
+# Screen par saare 4 channels ke buttons dikhane ke liye
 def join_channels_keyboard():
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    for ch in CHANNELS:
-        markup.add(types.InlineKeyboardButton(f"🔹 {ch['name']}", url=ch["url"]))
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    b1 = types.InlineKeyboardButton("🔹 " + CHANNELS[0]["name"], url=CHANNELS[0]["url"])
+    b2 = types.InlineKeyboardButton("🔹 " + CHANNELS[1]["name"], url=CHANNELS[1]["url"])
+    b3 = types.InlineKeyboardButton("🔹 " + CHANNELS[2]["name"], url=CHANNELS[2]["url"])
+    b4 = types.InlineKeyboardButton("🔹 " + CHANNELS[3]["name"], url=CHANNELS[3]["url"])
+    markup.add(b1, b2)
+    markup.add(b3, b4)
     markup.add(types.InlineKeyboardButton("✅ Verify Joined", callback_data="verify_action"))
     return markup
 
@@ -268,7 +275,7 @@ def handle_callbacks(call):
                 pass
             send_home_screen(user_id)
         else:
-            bot.answer_callback_query(call.id, "❌ Pehle channels join karein!", show_alert=True)
+            bot.answer_callback_query(call.id, "❌ Pehle dono Public channels join karein!", show_alert=True)
 
     elif call.data == "menu_refer":
         with get_connection() as conn:
