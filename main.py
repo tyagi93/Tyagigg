@@ -2,7 +2,7 @@ import sqlite3
 from telebot import TeleBot, types
 
 # ==========================================
-# ⚙️ CONFIGURATION & 4 CHANNELS
+# ⚙️ CONFIGURATION (ALL PUBLIC CHANNELS)
 # ==========================================
 BOT_TOKEN = "8620675983:AAGJUNNSOcQ043ADLYai4LW9GU8hJZZBYqk"
 BOT_NAME = "Deepak redeem code"
@@ -13,18 +13,18 @@ SUPPORT_USERNAME = "Tyagizbg"
 PER_REFER_BONUS = 3.0
 CODE_COST = 10.0
 
-# NOTE: Agar private channels ki -100 ID abhi nahi pata, to bot crash na ho isliye None rakha hai,
-# jaise hi ID mil jaye yahan chat_id me -100xxxxxx daal dena!
+# Saare channels public usernames ke sath
+# Bot ko in sabhi channels me Administrator zaroor banayein!
 CHANNELS = [
     {
         "name": "Join Deepak Channel 1",
         "chat_id": "@itzdeepakisking",
-        "url": "https://t.me/itzdeepakisking?livestream=51fd857879b74b2af7"
+        "url": "https://t.me/itzdeepakisking"
     },
     {
         "name": "Join Deepak Channel 2",
-        "chat_id": None,  # Yahan channel 2 ki -100 ID daalein (e.g., -1001234567890)
-        "url": "https://t.me/+xObMfd9OJvs4OWFl"
+        "chat_id": "@itzdeepakisking",  # Agar naya public username hai toh yahan replace karein
+        "url": "https://t.me/itzdeepakisking"
     },
     {
         "name": "Join Rich Paid Mod Hub",
@@ -33,8 +33,8 @@ CHANNELS = [
     },
     {
         "name": "Join Deepak Channel 4",
-        "chat_id": None,  # Yahan channel 4 ki -100 ID daalein (e.g., -1009876543210)
-        "url": "https://t.me/+2jedZDCLLxVkMDQ1"
+        "chat_id": "@Richpaidmodhub",  # Agar naya public username hai toh yahan replace karein
+        "url": "https://t.me/Richpaidmodhub"
     }
 ]
 
@@ -99,29 +99,16 @@ except Exception:
     pass
 
 # ==========================================
-# ⚡ AUTO-APPROVE REQUESTS (Private Channels)
-# ==========================================
-@bot.chat_join_request_handler()
-def approve_join_request(update: types.ChatJoinRequest):
-    try:
-        bot.approve_chat_join_request(update.chat.id, update.from_user.id)
-    except Exception:
-        pass
-
-# ==========================================
-# 🔍 100% STRICT CHANNELS CHECK
+# 🔍 100% STRICT PUBLIC CHANNELS CHECK
 # ==========================================
 def check_user_joined_all(user_id):
     for ch in CHANNELS:
-        if ch["chat_id"]:
-            try:
-                member = bot.get_chat_member(ch["chat_id"], user_id)
-                # Agar user left ya kicked hai to FALSE
-                if member.status in ['left', 'kicked']:
-                    return False
-            except Exception:
-                # Agar bot chat member nahi nikal pa raha ya user nahi hai
+        try:
+            member = bot.get_chat_member(ch["chat_id"], user_id)
+            if member.status in ['left', 'kicked']:
                 return False
+        except Exception:
+            return False
     return True
 
 def join_channels_keyboard():
@@ -179,7 +166,6 @@ def start_cmd(message):
         else:
             is_verified = user[0]
 
-    # Agar user verified nahi hai ya channels chhod diye hain:
     if is_verified == 0 or not check_user_joined_all(user_id):
         text = (
             "🔒 **ACCESS REQUIRED**\n\n"
@@ -215,7 +201,6 @@ def handle_callbacks(call):
     user_id = call.from_user.id
 
     if call.data == "verify_action":
-        # Yahan strict check ho raha hai
         if check_user_joined_all(user_id):
             ref_to_notify = None
             new_ref_bal = 0
@@ -365,5 +350,5 @@ def handle_callbacks(call):
 
 if __name__ == "__main__":
     print("🚀 Deepak Redeem Code Bot successfully running...")
-    bot.infinity_polling(allowed_updates=['message', 'callback_query', 'chat_join_request'], timeout=20)
+    bot.infinity_polling(allowed_updates=['message', 'callback_query'], timeout=20)
     
