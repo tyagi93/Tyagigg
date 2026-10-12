@@ -4,7 +4,7 @@ from telebot import TeleBot, types
 # ==========================================
 # ⚙️ CONFIGURATION & 4 CHANNELS
 # ==========================================
-BOT_TOKEN = "8620675983:AAGJUNNSOcQ043ADLYai4LW9GU8hJZZBYqk"
+BOT_TOKEN = "8620675983:AAHEXDoXW0_vAyY0bS9vGzU4MLguj8oOYsc"
 BOT_NAME = "Deepak redeem code"
 BOT_USERNAME = "DeepakRedeemCode_bot"
 ADMIN_ID = 5744767539
